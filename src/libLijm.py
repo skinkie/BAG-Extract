@@ -1,5 +1,19 @@
 import os
-from xml.dom import minidom
+
+try:
+    import lxml.etree as ET
+except ImportError:
+    try:
+        import cElementTree as ET
+    except ImportError:
+        try:
+            import elementtree.ElementTree as ET
+        except ImportError:
+            import xml.etree.ElementTree as ET
+
+def tagVolledigeNS(tag, nsmap):
+    sep = tag.split(':')
+    return '{%s}%s' % (nsmap[sep[0]], sep[1])
 
 def bestandVerwerkExtractPad(log, pad, bagObjecten, appyield=None):
     verwerkteBestanden = 0
@@ -21,10 +35,11 @@ def bestandVerwerkExtractPad(log, pad, bagObjecten, appyield=None):
                         log.startTimer()
                         
                         try:
-                            xml = minidom.parse(xmlFile)
+                            xml = ET.parse(xmlFile)
+                            nsmap = xml.getroot().nsmap
                             teller = 0
                             for bagObject in bagObjecten:
-                                for xmlObject in xml.getElementsByTagName(bagObject.tag()):
+                                for xmlObject in xml.iterfind(tagVolledigeNS(bagObject.tag(), nsmap)):
                                     bagObject.leesUitXML(xmlObject)
                                     bagObject.voegToeInDatabase()
                                     teller += 1
@@ -35,6 +50,7 @@ def bestandVerwerkExtractPad(log, pad, bagObjecten, appyield=None):
                             verwerkteBestanden += 1
                         except Exception, foutmelding:
                             log("*** FOUT *** Fout in verwerking xml-bestand '%s':\n %s" %(xmlFileNaam, foutmelding))
+                            raise
                 log("")
         return verwerkteBestanden
 
@@ -72,19 +88,20 @@ def bestandVerwerkMutatiePad(log, pad, appyield=None):
                         log.startTimer()
                         
                         try:
-                            xml = minidom.parse(xmlFile)
+                            xml = ET.parse(xmlFile)
+                            nsmap = xml.getroot().nsmap
                             tellerNieuw  = 0
                             tellerWijzig = 0
-                            for xmlMutatie in xml.getElementsByTagName("product_LVC:Mutatie-product"):
-                                xmlObjectType = xmlMutatie.getElementsByTagName("product_LVC:ObjectType")
+                            for xmlMutatie in xml.iterfind(tagVolledigeNS("product_LVC:Mutatie-product", nsmap)):
+                                xmlObjectType = xmlMutatie.findall(tagVolledigeNS("product_LVC:Mutatie-product", nsmap))
                                 if len(xmlObjectType) > 0:
                                     bagObjectOrigineel = getBAGobjectBijType(getText(xmlObjectType[0].childNodes))
                                     bagObjectWijziging = getBAGobjectBijType(getText(xmlObjectType[0].childNodes))
                                     bagObjectNieuw     = getBAGobjectBijType(getText(xmlObjectType[0].childNodes))
 
-                                    xmlOrigineel = xmlMutatie.getElementsByTagName("product_LVC:Origineel")
-                                    xmlWijziging = xmlMutatie.getElementsByTagName("product_LVC:Wijziging")
-                                    xmlNieuw     = xmlMutatie.getElementsByTagName("product_LVC:Nieuw")
+                                    xmlOrigineel = xmlMutatie.findall(tagVolledigeNS("product_LVC:Origineel", nsmap))
+                                    xmlWijziging = xmlMutatie.findall(tagVolledigeNS("product_LVC:Wijziging", nsmap))
+                                    xmlNieuw     = xmlMutatie.findall(tagVolledigeNS("product_LVC:Nieuw", nsmap))
                                     if len(xmlOrigineel) > 0 and bagObjectOrigineel and len(xmlWijziging) > 0 and bagObjectWijziging:
                                         bagObjectOrigineel.leesUitXML(xmlOrigineel[0].getElementsByTagName(bagObjectOrigineel.tag())[0])
                                         bagObjectWijziging.leesUitXML(xmlWijziging[0].getElementsByTagName(bagObjectWijziging.tag())[0])
