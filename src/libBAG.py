@@ -39,14 +39,24 @@
 #------------------------------------------------------------------------------
 from libLog import *
 from libDatabase import *
+from libLijm import tagVolledigeNS
+
+
+try:
+    import lxml.etree as ET
+except ImportError:
+    try:
+        import cElementTree as ET
+    except ImportError:
+        try:
+            import elementtree.ElementTree as ET
+        except ImportError:
+            import xml.etree.ElementTree as ET
+
 
 # Geef de waarde van een textnode in XML
-def getText(nodelist):
-    rc = ""
-    for node in nodelist:
-        if node.nodeType == node.TEXT_NODE:
-            rc = rc + node.data
-    return rc
+def getText(node):
+    return "".join(node.itertext())
 
 # Geef de waardes van alle elementen met de gegeven tag binnen de XML (parent).
 # De tag kan een samengestelde tag zijn opgebouwd uit verschillende niveaus gescheiden door een '/'.
@@ -54,17 +64,22 @@ def getValues(parent, tag):
     data = []
     # Splits de tag bij het eerste voorkomen van '/' met behulp van de partition-functie
     tags = tag.partition("/")
-    for node in parent.getElementsByTagName(tags[0]):
+    for node in list(parent):
+        if node.tag == tagVolledigeNS(tags[0], node.nsmap):
+            if tags[1] == "/":
+                data.extend(getValues(node, tags[2]))
+            else:
+                data.append(getText(node))
         # getElementsByTagName geeft alle elementen met die tag die ergens onder de parent hangen.
         # We gebruiken hier echter alleen die elementen die rechtstreeks onder de parent hangen.
         # Immers als we op zoek zijn naar de identificatie van een verblijfsobject dan willen we niet de
         # identificaties van gerelateerde objecten van dat verblijfsobject hebben.
         # Daarom controleren we dat de tag van de parent van de gevonden node, gelijk is aan de tag van de parent
-        if node.parentNode.tagName == parent.tagName:    
-            if tags[1] == "/":
-                data.extend(getValues(node, tags[2]))
-            else:
-                data.append(getText(node.childNodes))
+        #if node.parentNode.tagName == parent.tagName:    
+        #    if tags[1] == "/":
+        #        data.extend(getValues(node, tags[2]))
+        #    else:
+        #        data.append(getText(node))
     return data        
 
 # Geef de waarde van het eerste element met de gegeven tag binnen de XML (parent). Als er geen eerste
@@ -159,20 +174,16 @@ class BAGpoint(BAGgeoAttribuut):
     
     # Initialisatie vanuit XML
     def leesUitXML(self, xml):
-        try:
-            pos       = ""
-            teller    = 0
-            geometrie = xml.getElementsByTagName(self._tag)[0]
-            point     = geometrie.getElementsByTagName("gml:Point")[0]            
-            for na in point.getElementsByTagName("gml:pos"):
-                teller += 1
-                pos = pos + na.firstChild.nodeValue + ","
-              
-            if teller > 0:
-                pos = pos[:-1]
-            self._waarde = "POINT(" + pos + ")"
-        except:
-            self._waarde = "POINT(0 0 0)"  
+        geometrie = xml.find('.//'+tagVolledigeNS(self._tag, xml.nsmap))
+        if geometrie is not None:
+            point = geometrie.find('.//'+tagVolledigeNS("gml:Point", geometrie.nsmap))
+            if point is not None:
+                # TODO: moet echt beter kunnen dan dit.
+                pos = "".join(point.itertext(with_tail=False)).replace('\n', '')
+                self._waarde = "POINT(" + pos + ")"
+                return
+
+        self._waarde = "POINT(0 0 0)"  
         
 #--------------------------------------------------------------------------------------------------------
 # Class         BAGpolygoon
@@ -200,32 +211,40 @@ class BAGpolygoon(BAGgeoAttribuut):
     def _leesXMLposList(self, xml):
         wktPosList = ""
         puntTeller = 0
-        for xmlPosList in xml.getElementsByTagName("gml:posList"):
-            for coordinaat in xmlPosList.firstChild.nodeValue.split(" "):
+        posList = xml.find('.//'+tagVolledigeNS("gml:posList", xml.nsmap))
+
+        if posList is not None:
+            for coordinaat in posList.text.split(" "):
                 puntTeller += 1
                 if puntTeller > self.dimensie():
                     wktPosList += ","
                     puntTeller  = 1
                 wktPosList += " " + coordinaat
+
         return wktPosList
 
     # Converteer een polygoon uit de XML-string naar een WKT-string.
     # Een polygoon bestaat uit een buitenring en 0 of meerdere binnenringen (gaten).
     def _leesXMLpolygoon(self, xmlPolygoon):
-        xmlExterior = xmlPolygoon.getElementsByTagName("gml:exterior")[0]
-        wktExterior = "(" + self._leesXMLposList(xmlExterior) + ")"
+        wktExterior = ""
+        xmlExterior = xmlPolygoon.find('.//'+tagVolledigeNS("gml:exterior", xmlPolygoon.nsmap))
+        if xmlExterior is not None:
+            wktExterior = "(" + self._leesXMLposList(xmlExterior) + ")"
                     
+
         wktInteriors = ""
-        for xmlInterior in xmlPolygoon.getElementsByTagName("gml:interior"):
+        for xmlInterior in xmlPolygoon.iterfind('.//'+tagVolledigeNS("gml:interior", xmlPolygoon.nsmap)):
             wktInteriors += ",(" + self._leesXMLposList(xmlInterior) + ")"
 
         return "(" + wktExterior + wktInteriors + ")"    
         
     # Initialisatie vanuit XML
     def leesUitXML(self, xml):
-        xmlGeometrie = xml.getElementsByTagName(self._tag)[0]
-        xmlPolygoon  = xmlGeometrie.getElementsByTagName("gml:Polygon")[0]
-        self._waarde = "POLYGON" + self._leesXMLpolygoon(xmlPolygoon)
+        xmlGeometrie = xml.find('.//'+tagVolledigeNS(self._tag, xml.nsmap))
+        if xmlGeometrie is not None:
+            xmlPolygoon = xmlGeometrie.find('.//'+tagVolledigeNS("gml:Polygon", xmlGeometrie.nsmap))
+            if xmlPolygoon is not None:
+                self._waarde = "POLYGON" + self._leesXMLpolygoon(xmlPolygoon)
 
 #--------------------------------------------------------------------------------------------------------
 # Class         BAGmultiPolygoon
@@ -239,13 +258,14 @@ class BAGmultiPolygoon(BAGpolygoon):
 
     # Initialisatie vanuit XML
     def leesUitXML(self, xml):
-        wktGeometrie = ""
-        xmlGeometrie = xml.getElementsByTagName(self._tag)[0]
-        for xmlPolygoon in xmlGeometrie.getElementsByTagName("gml:Polygon"):
-            if wktGeometrie <> "":
-                wktGeometrie += ","
-            wktGeometrie += self._leesXMLpolygoon(xmlPolygoon)
-        self._waarde = "MULTIPOLYGON(" + wktGeometrie + ")"
+        xmlGeometrie = xml.find('.//'+tagVolledigeNS(self._tag, xml.nsmap))
+        if xmlGeometrie is not None:
+            wktGeometrie = ""
+            for xmlPolygoon in xmlGeometrie.iterfind('.//'+tagVolledigeNS("gml:Polygon", xmlGeometrie.nsmap)):
+                if wktGeometrie <> "":
+                    wktGeometrie += ","
+                wktGeometrie += self._leesXMLpolygoon(xmlPolygoon)
+            self._waarde = "MULTIPOLYGON(" + wktGeometrie + ")"
             
 #--------------------------------------------------------------------------------------------------------
 # Class         BAGrelatieAttribuut

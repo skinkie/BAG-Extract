@@ -36,17 +36,16 @@ def bestandVerwerkExtractPad(log, pad, bagObjecten, appyield=None):
                         
                         try:
                             xml = ET.parse(xmlFile)
-                            nsmap = xml.getroot().nsmap
                             teller = 0
                             for bagObject in bagObjecten:
-                                for xmlObject in xml.iterfind(tagVolledigeNS(bagObject.tag(), nsmap)):
+                                for xmlObject in xml.iterfind('.//'+tagVolledigeNS(bagObject.tag(), xml.getroot().nsmap)):
                                     bagObject.leesUitXML(xmlObject)
                                     bagObject.voegToeInDatabase()
                                     teller += 1
                                     if appyield is not None:
                                         appyield.Yield(True)
                             log.schrijfTimer("=> %d objecten toegevoegd" %(teller))
-                            xml.unlink()
+                            xml = None
                             verwerkteBestanden += 1
                         except Exception, foutmelding:
                             log("*** FOUT *** Fout in verwerking xml-bestand '%s':\n %s" %(xmlFileNaam, foutmelding))
@@ -89,22 +88,19 @@ def bestandVerwerkMutatiePad(log, pad, appyield=None):
                         
                         try:
                             xml = ET.parse(xmlFile)
-                            nsmap = xml.getroot().nsmap
                             tellerNieuw  = 0
                             tellerWijzig = 0
-                            for xmlMutatie in xml.iterfind(tagVolledigeNS("product_LVC:Mutatie-product", nsmap)):
-                                xmlObjectType = xmlMutatie.findall(tagVolledigeNS("product_LVC:Mutatie-product", nsmap))
-                                if len(xmlObjectType) > 0:
-                                    bagObjectOrigineel = getBAGobjectBijType(getText(xmlObjectType[0].childNodes))
-                                    bagObjectWijziging = getBAGobjectBijType(getText(xmlObjectType[0].childNodes))
-                                    bagObjectNieuw     = getBAGobjectBijType(getText(xmlObjectType[0].childNodes))
+                            for xmlMutatie in xml.iterfind(tagVolledigeNS("product_LVC:Mutatie-product", xml.nsmap)):
+                                xmlObjectType = xmlMutatie.find(tagVolledigeNS("product_LVC:Mutatie-product", xml.nsmap))
+                                if xmlObjectType is not None:
+                                    bagObjectOrigineel = bagOBjectWijziging = bagObjectNieuw = getBAGobjectBijType(getText(xmlObjectType))
 
-                                    xmlOrigineel = xmlMutatie.findall(tagVolledigeNS("product_LVC:Origineel", nsmap))
-                                    xmlWijziging = xmlMutatie.findall(tagVolledigeNS("product_LVC:Wijziging", nsmap))
-                                    xmlNieuw     = xmlMutatie.findall(tagVolledigeNS("product_LVC:Nieuw", nsmap))
-                                    if len(xmlOrigineel) > 0 and bagObjectOrigineel and len(xmlWijziging) > 0 and bagObjectWijziging:
-                                        bagObjectOrigineel.leesUitXML(xmlOrigineel[0].getElementsByTagName(bagObjectOrigineel.tag())[0])
-                                        bagObjectWijziging.leesUitXML(xmlWijziging[0].getElementsByTagName(bagObjectWijziging.tag())[0])
+                                    xmlOrigineel = xmlMutatie.find(tagVolledigeNS("product_LVC:Origineel", xml.nsmap))
+                                    xmlWijziging = xmlMutatie.find(tagVolledigeNS("product_LVC:Wijziging", xml.nsmap))
+                                    xmlNieuw     = xmlMutatie.find(tagVolledigeNS("product_LVC:Nieuw", xml.nsmap))
+                                    if xmlOrigineel is not None and bagObjectOrigineel and xmlWijziging is not None and bagObjectWijziging:
+                                        bagObjectOrigineel.leesUitXML(xmlOrigineel.find(tagVolledigeNS(bagObjectOrigineel.tag(), xml.nsmap)))
+                                        bagObjectWijziging.leesUitXML(xmlWijziging.find(tagVolledigeNS(bagObjectWijziging.tag(), xml.nsmap)))
                                         bagObjectOrigineel.wijzigInDatabase(bagObjectWijziging)
                                         tellerWijzig += 1
                                         if bagObjectOrigineel.objectType() == "WPL":
@@ -121,8 +117,8 @@ def bestandVerwerkMutatiePad(log, pad, appyield=None):
                                             wVBO += 1
                                         if bagObjectOrigineel.objectType() == "PND":
                                             wPND += 1
-                                    if len(xmlNieuw) > 0:
-                                        bagObjectNieuw.leesUitXML(xmlNieuw[0].getElementsByTagName(bagObjectNieuw.tag())[0])
+                                    if xmlNieuw is not None:
+                                        bagObjectNieuw.leesUitXML(xmlNieuw.find(tagVolledigeNS(bagObjectNieuw.tag(), xml.nsmap)))
                                         bagObjectNieuw.voegToeInDatabase()
                                         #bagObjectNieuw.controleerLevenscyclus(toonResultaat=True)
                                         #if not bagObjectNieuw.levenscyclusCorrect:
@@ -145,7 +141,7 @@ def bestandVerwerkMutatiePad(log, pad, appyield=None):
                                 if appyield is not None:
                                     appyield.Yield(True)
                             log.schrijfTimer("=> %d objecten toegevoegd, %d objecten gewijzigd" %(tellerNieuw, tellerWijzig))
-                            xml.unlink()
+                            xml = None
                             verwerkteBestanden += 1
                         except Exception, foutmelding:
                             log("*** FOUT *** Fout in verwerking xml-bestand '%s':\n %s" %(xmlFileNaam, foutmelding))
