@@ -118,6 +118,10 @@ class BAGattribuut:
     # Attribuut tag
     def tag(self):
         return self._tag
+
+    # Attribuut sqltype. Deze method kan worden overloaded
+    def sqltype(self):
+        return "VARCHAR(%d)" % (self._lengte)
     
     # Attribuut waarde. Deze method kan worden overloaded
     def waarde(self):
@@ -130,6 +134,10 @@ class BAGattribuut:
     # Geef aan dat het attribuut enkelvoudig is (maar 1 waarde heeft). Deze method kan worden overloaded.
     def enkelvoudig(self):
         return True
+    
+    # Initialiseer database
+    def sqlinit(self):
+        return ''
 
     # Initialisatie vanuit XML
     def leesUitXML(self, xml):
@@ -137,13 +145,147 @@ class BAGattribuut:
         # Door een bug in BAG Extract bevat de einddatum een fictieve waarde 31-12-2299 in het geval dat
         # deze leeg hoort te zijn. Om dit te omzeilen, controleren we hier de waarde en maken deze zo nodig
         # zelf leeg.
-        if self._naam == "einddatumTijdvakGeldigheid" and self._waarde == "2299123100000000":
-            self._waarde = ""
+        # if self._naam == "einddatumTijdvakGeldigheid" and self._waarde == "2299123100000000":
+        #    self._waarde = None
 
     # Print informatie over het attribuut op het scherm
     def schrijf(self):
         print "- %-27s: %s" %(self._naam, self._waarde)
+
+#--------------------------------------------------------------------------------------------------------
+# Class         BAGenumAttribuut
+# Afgeleid van  BAGattribuut
+# Omschrijving  Bevat een of meerdere waarden binnen een restrictie 
+#--------------------------------------------------------------------------------------------------------
+class BAGenumAttribuut(BAGattribuut):
+    # Constructor
+    def __init__(self, lijst, naam, tag):
+        self._lijst   = lijst
+        self._lengte  = len(max(lijst, key=len))
+        self._naam    = naam
+        self._tag     = tag
+        self._waarde  = ""
+
+    # Attribuut sqltype. Deze method kan worden overloaded
+    def sqltype(self):
+        return self._naam
+
+    # Initialiseer database
+    def sqlinit(self):
+        return "CREATE TYPE %s AS ENUM ('%s');" % (self._naam, "', '".join(self._lijst))
+
+#--------------------------------------------------------------------------------------------------------
+# Class         BAGnumeriekAttribuut
+# Afgeleid van  BAGattribuut
+# Omschrijving  Bevat een numerieke waarde 
+#--------------------------------------------------------------------------------------------------------
+class BAGnumeriekAttribuut(BAGattribuut):
+    # Attribuut sqltype. Deze method kan worden overloaded
+    def sqltype(self):
+        return "NUMERIC(%d)" % (self._lengte)
+
+#--------------------------------------------------------------------------------------------------------
+# Class         BAGintegerAttribuut
+# Afgeleid van  BAGattribuut
+# Omschrijving  Bevat een numerieke waarde 
+#--------------------------------------------------------------------------------------------------------
+class BAGintegerAttribuut(BAGattribuut):
+    # Constructor
+    def __init__(self, naam, tag):
+        self._naam    = naam
+        self._tag     = tag
+        self._waarde  = None
+
+    # Attribuut sqltype. Deze method kan worden overloaded
+    def sqltype(self):
+        return "INTEGER"
+
+
+#--------------------------------------------------------------------------------------------------------
+# Class         BAGdatumAttribuut
+# Afgeleid van  BAGattribuut
+# Omschrijving  Bevat een waarheid attribuut
+#--------------------------------------------------------------------------------------------------------
+class BAGbooleanAttribuut(BAGattribuut):
+    # Constructor
+    def __init__(self, naam, tag):
+        self._naam    = naam
+        self._tag     = tag
+        self._waarde  = None
+
+    # Attribuut sqltype. Deze method kan worden overloaded
+    def sqltype(self):
+        return "BOOLEAN"
     
+    # Initialisatie vanuit XML
+    def leesUitXML(self, xml):
+        self._waarde = getValue(xml, self._tag)
+        if self._waarde == 'N':
+            self._waarde = 'FALSE'
+        elif self._waarde == 'J':
+            self._waarde = 'TRUE'
+        elif self._waarde == '':
+            self._waarde = None
+        else:
+            print 'Onverwacht: %s'%(self._waarde)
+
+
+#--------------------------------------------------------------------------------------------------------
+# Class         BAGdateAttribuut
+# Afgeleid van  BAGattribuut
+# Omschrijving  Bevat een waarheid attribuut
+#--------------------------------------------------------------------------------------------------------
+class BAGdateAttribuut(BAGattribuut):
+    # Constructor
+    def __init__(self, naam, tag):
+        self._naam    = naam
+        self._tag     = tag
+        self._waarde  = None
+
+    # Attribuut sqltype. Deze method kan worden overloaded
+    def sqltype(self):
+        return "DATE"
+    
+    # Initialisatie vanuit XML
+    def leesUitXML(self, xml):
+        self._waarde = getValue(xml, self._tag)
+        if self._waarde == '':
+            self._waarde = None
+
+#--------------------------------------------------------------------------------------------------------
+# Class         BAGdatetimeAttribuut
+# Afgeleid van  BAGattribuut
+# Omschrijving  Bevat een waarheid attribuut
+#--------------------------------------------------------------------------------------------------------
+class BAGdatetimeAttribuut(BAGattribuut):
+    # Constructor
+    def __init__(self, naam, tag):
+        self._naam    = naam
+        self._tag     = tag
+        self._waarde  = None
+
+    # Attribuut sqltype. Deze method kan worden overloaded
+    def sqltype(self):
+        return "TIMESTAMP WITHOUT TIME ZONE"
+    
+    # Initialisatie vanuit XML
+    def leesUitXML(self, xml):
+        self._waarde = getValue(xml, self._tag)
+        if self._waarde != '':
+            jaar = self._waarde[0:4]
+            maand = self._waarde[4:6]
+            dag = self._waarde[6:8]
+            uur = self._waarde[8:10]
+            minuut = self._waarde[10:12]
+            seconden = self._waarde[12:14]
+            msec = self._waarde[14:16]
+
+            if jaar != '2299':
+                self._waarde = '%s%s%s %s%s%s'%(jaar, maand, dag, uur, minuut, seconden)
+            else:
+                print 'Onverwacht: %s'%(self._waarde)
+
+
 #--------------------------------------------------------------------------------------------------------
 # Class         BAGgeoAttribuut
 # Afgeleid van  BAGattribuut
@@ -310,6 +452,15 @@ class BAGrelatieAttribuut(BAGattribuut):
                 print "- %-27s  %s" %("", waarde)
 
 #--------------------------------------------------------------------------------------------------------
+# Class         BAGrelatieNumeriekAttribuut
+# Afgeleid van  BAGrelatieAttribuut
+# Omschrijving  Bevat een nummeriek attribuut dat meer dan 1 waarde kan hebben.
+#--------------------------------------------------------------------------------------------------------
+class BAGrelatieNumeriekAttribuut(BAGrelatieAttribuut):
+    def sqltype(self):
+        return "NUMERIC(%d)" % (self._lengte)
+
+#--------------------------------------------------------------------------------------------------------
 # Class         BAGobject
 # Omschrijving  Basisclass voor de 7 types BAG-objecten. Deze class bevat de generieke attributen die
 #               in al deze types BAG-objecten voorkomen.
@@ -317,15 +468,15 @@ class BAGrelatieAttribuut(BAGattribuut):
 class BAGobject:
     # Constructor
     def __init__(self):
-        self.identificatie               = BAGattribuut(16, "identificatie", "bag_LVC:identificatie")
-        self.aanduidingRecordInactief    = BAGattribuut( 1, "aanduidingRecordInactief", "bag_LVC:aanduidingRecordInactief")
-        self.aanduidingRecordCorrectie   = BAGattribuut( 5, "aanduidingRecordCorrectie", "bag_LVC:aanduidingRecordCorrectie")
-        self.officieel                   = BAGattribuut( 1, "officieel", "bag_LVC:officieel")
-        self.inOnderzoek                 = BAGattribuut( 1, "inOnderzoek", "bag_LVC:inOnderzoek")
-        self.begindatumTijdvakGeldigheid = BAGattribuut(16, "begindatumTijdvakGeldigheid", "bag_LVC:tijdvakgeldigheid/bagtype:begindatumTijdvakGeldigheid")
-        self.einddatumTijdvakGeldigheid  = BAGattribuut(16, "einddatumTijdvakGeldigheid", "bag_LVC:tijdvakgeldigheid/bagtype:einddatumTijdvakGeldigheid")
+        self.identificatie               = BAGnumeriekAttribuut(16, "identificatie", "bag_LVC:identificatie")
+        self.aanduidingRecordInactief    = BAGbooleanAttribuut("aanduidingRecordInactief", "bag_LVC:aanduidingRecordInactief")
+        self.aanduidingRecordCorrectie   = BAGintegerAttribuut("aanduidingRecordCorrectie", "bag_LVC:aanduidingRecordCorrectie")
+        self.officieel                   = BAGbooleanAttribuut("officieel", "bag_LVC:officieel")
+        self.inOnderzoek                 = BAGbooleanAttribuut("inOnderzoek", "bag_LVC:inOnderzoek")
+        self.begindatumTijdvakGeldigheid = BAGdatetimeAttribuut("begindatumTijdvakGeldigheid", "bag_LVC:tijdvakgeldigheid/bagtype:begindatumTijdvakGeldigheid")
+        self.einddatumTijdvakGeldigheid  = BAGdatetimeAttribuut("einddatumTijdvakGeldigheid", "bag_LVC:tijdvakgeldigheid/bagtype:einddatumTijdvakGeldigheid")
         self.documentnummer              = BAGattribuut(20, "documentnummer", "bag_LVC:bron/bagtype:documentnummer")
-        self.documentdatum               = BAGattribuut( 8, "documentdatum", "bag_LVC:bron/bagtype:documentdatum")
+        self.documentdatum               = BAGdateAttribuut("documentdatum", "bag_LVC:bron/bagtype:documentdatum")
 
         self.attributen = []
         self.attributen.append(self.identificatie)
@@ -387,16 +538,21 @@ class BAGobject:
     def maakTabel(self):
         sql = ""
         for attribuut in self.attributen:
-            if attribuut.enkelvoudig():
+            sqlinit = attribuut.sqlinit()
+            if sqlinit != '':
+                database.execute(sqlinit)
+
+            if attribuut.enkelvoudig() and attribuut.naam()[0] != '_':
                 if sql == "":
-                    sql  = "CREATE TABLE " + self.naam() + " (" + attribuut.naam() + " VARCHAR(%d)" %(attribuut.lengte())
+                    sql  = "CREATE TABLE " + self.naam() + " (" + attribuut.naam() + " " + attribuut.sqltype()
                 else:
-                    sql += "," + attribuut.naam() + " VARCHAR(%d)" %(attribuut.lengte())
+                    sql += "," + attribuut.naam() + " " + attribuut.sqltype()
         sql += ",begindatum DATE"
         sql += ",einddatum  DATE"
         sql += ")"
         if self.heeftGeometrie():
             sql += " WITH (OIDS=true)"
+       
         database.maakTabel(self.naam(), sql)
 
         if self.heeftGeometrie():
@@ -410,11 +566,11 @@ class BAGobject:
     # Maak voor een relatie een tabel in de database
     def maakTabelRelatie(self, relatie):
         sql  = "CREATE TABLE " + relatie.relatieNaam() + " " 
-        sql += "(identificatie               VARCHAR(16)"
-        sql += ",aanduidingrecordinactief    VARCHAR(1)"
-        sql += ",aanduidingrecordcorrectie   VARCHAR(5)"
-        sql += ",begindatumtijdvakgeldigheid VARCHAR(16)"
-        sql += "," + relatie.naam() + " VARCHAR(%d)" %(relatie.lengte())
+        sql += "(identificatie               NUMERIC(16,0)"
+        sql += ",aanduidingrecordinactief    BOOLEAN"
+        sql += ",aanduidingrecordcorrectie   INTEGER"
+        sql += ",begindatumtijdvakgeldigheid TIMESTAMP WITHOUT TIME ZONE"
+        sql += "," + relatie.naam() + " " + relatie.sqltype()
         sql += ")"
         database.maakTabel(relatie.relatieNaam(), sql)
 
@@ -459,11 +615,11 @@ class BAGobject:
         sql  = "CREATE VIEW " + self.naam() + "actueel" 
         sql += " AS SELECT "
         if self.heeftGeometrie():
-            sql += self.naam() + ".oid::character varying as oid," 
+            sql += self.naam() + ".oid::bigint as oid," 
         sql += " * FROM " + self.naam()
         sql += " WHERE begindatum <= current_date"
         sql += "   AND einddatum  >= current_date"
-        sql += "   AND aanduidingrecordinactief = 'N'"
+        sql += "   AND aanduidingrecordinactief = FALSE"
         database.maakView(self.naam() + "actueel", sql)
 
     # Maak een view op de opgegeven tabel om alleen actieve, actuele voorkomens te selecteren
@@ -472,11 +628,11 @@ class BAGobject:
         sql  = "CREATE VIEW " + self.naam() + "actueelBestaand"
         sql += " AS SELECT "
         if self.heeftGeometrie():
-            sql += self.naam() + ".oid::character varying as oid," 
+            sql += self.naam() + ".oid::bigint as oid," 
         sql += " * FROM " + self.naam()
         sql += " WHERE begindatum <= current_date"
         sql += "   AND einddatum  >= current_date"
-        sql += "   AND aanduidingrecordinactief = 'N'"
+        sql += "   AND aanduidingrecordinactief = FALSE"
         sql += "   AND " + statusveld + " <> '" + status1 + "'" 
         if status2 <> "":
             sql += "   AND " + statusveld + " <> '" + status2 + "'" 
@@ -488,14 +644,16 @@ class BAGobject:
         waardes = ""
         inhoud  = []
         for attribuut in self.attributen:
-            if attribuut.enkelvoudig():
+            if attribuut.enkelvoudig() and attribuut.naam()[0] != '_':
                 if velden == "":
                     velden  = "(" + attribuut.naam()
                     waardes = "(%s" 
-                    inhoud.append(attribuut.waarde())
                 else:
                     velden  += "," + attribuut.naam()
                     waardes += ", %s"
+                if attribuut.waarde() == '':
+                    inhoud.append(None)
+                else:
                     inhoud.append(attribuut.waarde())
         if self.heeftGeometrie():
             velden  += ",geometrie"
@@ -510,7 +668,7 @@ class BAGobject:
         database.insert(sql, tuple(inhoud), self.identificatie.waarde(),)
 
         for attribuut in self.attributen:
-            if not attribuut.enkelvoudig():
+            if not attribuut.enkelvoudig() and attribuut.naam()[0] != '_':
                 for waarde in attribuut.waarde():
                     sql  = "INSERT INTO " + attribuut.relatieNaam() + " "
                     sql += "(identificatie"
@@ -719,9 +877,10 @@ class BAGobject:
 class Woonplaats(BAGobject):
     def __init__(self):
         BAGobject.__init__(self)
-        self.woonplaatsNaam      = BAGattribuut(            80, "woonplaatsNaam", "bag_LVC:woonplaatsNaam")
-        self.woonplaatsStatus    = BAGattribuut(            80, "woonplaatsStatus", "bag_LVC:woonplaatsStatus")
-        self.woonplaatsGeometrie = BAGmultiPolygoon(2, 1000000, "woonplaatsGeometrie", "bag_LVC:woonplaatsGeometrie")
+        self.woonplaatsNaam      = BAGattribuut(80, "woonplaatsNaam", "bag_LVC:woonplaatsNaam")
+        self.woonplaatsStatus    = BAGenumAttribuut(['Woonplaats aangewezen', 'Woonplaats ingetrokken'],
+                                                    "woonplaatsStatus", "bag_LVC:woonplaatsStatus")
+        self.woonplaatsGeometrie = BAGmultiPolygoon(2, 1000000, "_woonplaatsGeometrie", "bag_LVC:woonplaatsGeometrie")
         self.attributen.append(self.woonplaatsNaam)       
         self.attributen.append(self.woonplaatsStatus)       
         self.attributen.append(self.woonplaatsGeometrie)
@@ -764,9 +923,16 @@ class OpenbareRuimte(BAGobject):
     def __init__(self):
         BAGobject.__init__(self)
         self.openbareRuimteNaam         = BAGattribuut(80, "openbareRuimteNaam", "bag_LVC:openbareRuimteNaam")
-        self.openbareRuimteStatus       = BAGattribuut(80, "openbareRuimteStatus", "bag_LVC:openbareruimteStatus")
-        self.openbareRuimteType         = BAGattribuut(40, "openbareRuimteType", "bag_LVC:openbareRuimteType")
-        self.gerelateerdeWoonplaats     = BAGattribuut(16, "gerelateerdeWoonplaats", "bag_LVC:gerelateerdeWoonplaats/bag_LVC:identificatie")
+        self.openbareRuimteStatus       = BAGenumAttribuut(['Naamgeving uitgegeven', 'Naamgeving ingetrokken'], 
+                                                            "naamgevingStatus", "bag_LVC:openbareruimteStatus")
+        self.openbareRuimteType         = BAGenumAttribuut(['Weg',
+                                                            'Water',
+                                                            'Spoorbaan',
+                                                            'Terrein',
+                                                            'Kunstwerk',
+                                                            'Landschappelijk gebied',
+                                                            'Administratief gebied'], "openbareRuimteType", "bag_LVC:openbareRuimteType")
+        self.gerelateerdeWoonplaats     = BAGnumeriekAttribuut(16, "gerelateerdeWoonplaats", "bag_LVC:gerelateerdeWoonplaats/bag_LVC:identificatie")
         self.verkorteOpenbareRuimteNaam = BAGattribuut(80, "verkorteOpenbareRuimteNaam", "nen5825:VerkorteOpenbareruimteNaam")
         self.attributen.append(self.openbareRuimteNaam)       
         self.attributen.append(self.openbareRuimteStatus)       
@@ -808,14 +974,17 @@ class OpenbareRuimte(BAGobject):
 class Nummeraanduiding(BAGobject):
     def __init__(self):
         BAGobject.__init__(self)
-        self.huisnummer                 = BAGattribuut( 5, "huisnummer", "bag_LVC:huisnummer")
-        self.huisletter                 = BAGattribuut( 5, "huisletter", "bag_LVC:huisletter")
+        self.huisnummer                 = BAGnumeriekAttribuut(5, "huisnummer", "bag_LVC:huisnummer")
+        self.huisletter                 = BAGattribuut( 1, "huisletter", "bag_LVC:huisletter")
         self.huisnummertoevoeging       = BAGattribuut( 4, "huisnummertoevoeging", "bag_LVC:huisnummertoevoeging")
         self.postcode                   = BAGattribuut( 6, "postcode", "bag_LVC:postcode")
-        self.nummeraanduidingStatus     = BAGattribuut(80, "nummeraanduidingStatus", "bag_LVC:nummeraanduidingStatus")
-        self.typeAdresseerbaarObject    = BAGattribuut(20, "typeAdresseerbaarObject", "bag_LVC:typeAdresseerbaarObject")
-        self.gerelateerdeOpenbareRuimte = BAGattribuut(16, "gerelateerdeOpenbareRuimte", "bag_LVC:gerelateerdeOpenbareRuimte/bag_LVC:identificatie")
-        self.gerelateerdeWoonplaats     = BAGattribuut(16, "gerelateerdeWoonplaats", "bag_LVC:gerelateerdeWoonplaats/bag_LVC:identificatie")
+        self.nummeraanduidingStatus     = BAGenumAttribuut(['Naamgeving uitgegeven', 'Naamgeving ingetrokken'],
+                                                            "naamgevingStatus", "bag_LVC:nummeraanduidingStatus")
+        self.typeAdresseerbaarObject    = BAGenumAttribuut(['Verblijfsobject',
+                                                            'Standplaats',
+                                                            'Ligplaats'], "typeAdresseerbaarObject", "bag_LVC:typeAdresseerbaarObject")
+        self.gerelateerdeOpenbareRuimte = BAGnumeriekAttribuut(16, "gerelateerdeOpenbareRuimte", "bag_LVC:gerelateerdeOpenbareRuimte/bag_LVC:identificatie")
+        self.gerelateerdeWoonplaats     = BAGnumeriekAttribuut(16, "gerelateerdeWoonplaats", "bag_LVC:gerelateerdeWoonplaats/bag_LVC:identificatie")
         self.attributen.append(self.huisnummer)       
         self.attributen.append(self.huisletter)       
         self.attributen.append(self.huisnummertoevoeging)
@@ -906,20 +1075,20 @@ class Nummeraanduiding(BAGobject):
         sql += "     , nummeraanduiding NUM"
         sql += " WHERE NUM.begindatum <= current_date"
         sql += "   AND NUM.einddatum  >= current_date"
-        sql += "   AND NUM.aanduidingrecordinactief = 'N'"
+        sql += "   AND NUM.aanduidingrecordinactief = FALSE"
         sql += "   AND OPR.identificatie = NUM.gerelateerdeopenbareruimte"
         sql += "   AND OPR.begindatum <= current_date"
         sql += "   AND OPR.einddatum  >= current_date"
-        sql += "   AND OPR.aanduidingrecordinactief = 'N'"
+        sql += "   AND OPR.aanduidingrecordinactief = FALSE"
         sql += "   AND (   (    WPL.identificatie = OPR.gerelateerdewoonplaats"
-        sql += "            AND NUM.gerelateerdewoonplaats = '')"
+        sql += "            AND NUM.gerelateerdewoonplaats = NULL)"
         sql += "        OR (WPL.identificatie = NUM.gerelateerdewoonplaats))"
         sql += "   AND WPL.begindatum <= current_date"
         sql += "   AND WPL.einddatum  >= current_date"
-        sql += "   AND WPL.aanduidingrecordinactief = 'N'"
+        sql += "   AND WPL.aanduidingrecordinactief = FALSE"
         database.maakView("adresActueel", sql %("adresActueel"))
         
-        sql += "   AND NUM.nummeraanduidingstatus <> 'Naamgeving ingetrokken'"
+        sql += "   AND NUM.naamgevingStatus <> 'Naamgeving ingetrokken'"
         database.maakView("adresActueelBestaand", sql %("adresActueelBestaand"))
         
         
@@ -972,10 +1141,11 @@ class BAGadresseerbaarObject(BAGobject):
 class Ligplaats(BAGadresseerbaarObject):
     def __init__(self):
         BAGadresseerbaarObject.__init__(self)
-        self.ligplaatsStatus    = BAGattribuut(       80, "ligplaatsStatus", "bag_LVC:ligplaatsStatus")
+        self.ligplaatsStatus = BAGenumAttribuut(['Plaats aangewezen', 'Plaats ingetrokken'],
+                                                 "plaatsStatus", "bag_LVC:ligplaatsStatus")
         self.ligplaatsGeometrie = BAGpolygoon(3, 1000000, "ligplaatsGeometrie", "bag_LVC:ligplaatsGeometrie")
         self.attributen.append(self.ligplaatsStatus)       
-        self.attributen.append(self.ligplaatsGeometrie)       
+        # self.attributen.append(self.ligplaatsGeometrie)       
 
     def tag(self):
         return "bag_LVC:Ligplaats"
@@ -1004,8 +1174,9 @@ class Ligplaats(BAGadresseerbaarObject):
 class Standplaats(BAGadresseerbaarObject):
     def __init__(self):
         BAGadresseerbaarObject.__init__(self)
-        self.standplaatsStatus    = BAGattribuut(       80, "standplaatsStatus", "bag_LVC:standplaatsStatus")
-        self.standplaatsGeometrie = BAGpolygoon(3, 1000000, "standplaatsGeometrie", "bag_LVC:standplaatsGeometrie")
+        self.standplaatsStatus = BAGenumAttribuut(['Plaats uitgegeven', 'Plaats ingetrokken'],
+                                                   "plaatsStatus", "bag_LVC:standplaatsStatus")
+        self.standplaatsGeometrie = BAGpolygoon(3, 1000000, "_standplaatsGeometrie", "bag_LVC:standplaatsGeometrie")
         self.attributen.append(self.standplaatsStatus)       
         self.attributen.append(self.standplaatsGeometrie)       
 
@@ -1036,12 +1207,18 @@ class Standplaats(BAGadresseerbaarObject):
 class Verblijfsobject(BAGadresseerbaarObject):
     def __init__(self):
         BAGadresseerbaarObject.__init__(self)
-        self.verblijfsobjectStatus       = BAGattribuut(       80, "verblijfsobjectStatus", "bag_LVC:verblijfsobjectStatus")
-        self.oppervlakteVerblijfsobject  = BAGattribuut(        6, "oppervlakteVerblijfsobject",  "bag_LVC:oppervlakteVerblijfsobject")
-        self.verblijfsobjectGeometrie    = BAGpoint(          100, "verblijfsobjectGeometrie", "bag_LVC:verblijfsobjectGeometrie")
+        self.verblijfsobjectStatus       = BAGenumAttribuut(['Verblijfsobject gevormd', \
+                                                             'Niet gerealiseerd verblijfsobject', \
+                                                             'Verblijfsobject in gebruik (niet ingemeten)', \
+                                                             'Verblijfsobject in gebruik', \
+                                                             'Verblijfsobject ingetrokken', \
+                                                             'Verblijfsobject buiten gebruik'],
+                                                             "verblijfsobjectStatus", "bag_LVC:verblijfsobjectStatus")
+        self.oppervlakteVerblijfsobject  = BAGnumeriekAttribuut(6, "oppervlakteVerblijfsobject",  "bag_LVC:oppervlakteVerblijfsobject")
+        self.verblijfsobjectGeometrie    = BAGpoint(          100, "_verblijfsobjectGeometrie", "bag_LVC:verblijfsobjectGeometrie")
         self.gebruiksdoelVerblijfsobject = BAGrelatieAttribuut("verblijfsobjectgebruiksdoel",
                                                                50, "gebruiksdoelVerblijfsobject", "bag_LVC:gebruiksdoelVerblijfsobject")
-        self.gerelateerdPand             = BAGrelatieAttribuut("verblijfsobjectpand",
+        self.gerelateerdPand             = BAGrelatieNumeriekAttribuut("verblijfsobjectpand",
                                                                16, "gerelateerdPand", "bag_LVC:gerelateerdPand/bag_LVC:identificatie")
         self.attributen.append(self.verblijfsobjectStatus)       
         self.attributen.append(self.oppervlakteVerblijfsobject)       
@@ -1091,9 +1268,16 @@ class Verblijfsobject(BAGadresseerbaarObject):
 class Pand(BAGobject):
     def __init__(self):
         BAGobject.__init__(self)
-        self.pandStatus    = BAGattribuut(       80, "pandStatus", "bag_LVC:pandstatus")
-        self.bouwjaar      = BAGattribuut(        6, "bouwjaar", "bag_LVC:bouwjaar")
-        self.pandGeometrie = BAGpolygoon(3, 1000000, "pandGeometrie", "bag_LVC:pandGeometrie")
+        self.pandStatus    = BAGenumAttribuut(['Bouwvergunning verleend', \
+                                               'Niet gerealiseerd pand', \
+                                               'Bouw gestart', \
+                                               'Pand in gebruik (niet ingemeten)', \
+                                               'Pand in gebruik', \
+                                               'Sloopvergunning verleend', \
+                                               'Pand gesloopt', \
+                                               'Pand buiten gebruik'], "pandStatus", "bag_LVC:pandstatus")
+        self.bouwjaar      = BAGnumeriekAttribuut(4, "bouwjaar", "bag_LVC:bouwjaar")
+        self.pandGeometrie = BAGpolygoon(3, 1000000, "_pandGeometrie", "bag_LVC:pandGeometrie")
         self.attributen.append(self.pandStatus)       
         self.attributen.append(self.bouwjaar)       
         self.attributen.append(self.pandGeometrie)       
