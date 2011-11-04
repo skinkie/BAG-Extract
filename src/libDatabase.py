@@ -69,6 +69,7 @@ class Database:
             self.connection.commit()
             return True
         except (psycopg2.Error,), foutmelding:
+            print createSQL
             log("*** FOUT *** Kan %s %s niet maken:\n %s" %(soort, naam, foutmelding))
             return False
         
