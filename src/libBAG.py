@@ -145,8 +145,8 @@ class BAGattribuut:
         # Door een bug in BAG Extract bevat de einddatum een fictieve waarde 31-12-2299 in het geval dat
         # deze leeg hoort te zijn. Om dit te omzeilen, controleren we hier de waarde en maken deze zo nodig
         # zelf leeg.
-        # if self._naam == "einddatumTijdvakGeldigheid" and self._waarde == "2299123100000000":
-        #    self._waarde = None
+        if self._naam == "einddatumTijdvakGeldigheid" and self._waarde == "2299123100000000":
+            self._waarde = None
 
     # Print informatie over het attribuut op het scherm
     def schrijf(self):
@@ -250,7 +250,10 @@ class BAGdateAttribuut(BAGattribuut):
     def leesUitXML(self, xml):
         self._waarde = getValue(xml, self._tag)
         if self._waarde == '':
-            self._waarde = None
+            jaar = self._waarde[0:4]
+
+            if jaar == '2299':
+                self._waarde = None
 
 #--------------------------------------------------------------------------------------------------------
 # Class         BAGdatetimeAttribuut
@@ -283,7 +286,7 @@ class BAGdatetimeAttribuut(BAGattribuut):
             if jaar != '2299':
                 self._waarde = '%s%s%s %s%s%s'%(jaar, maand, dag, uur, minuut, seconden)
             else:
-                print 'Onverwacht: %s'%(self._waarde)
+                self._waarde = None
 
 
 #--------------------------------------------------------------------------------------------------------
@@ -617,8 +620,7 @@ class BAGobject:
         if self.heeftGeometrie():
             sql += self.naam() + ".oid::bigint as oid," 
         sql += " * FROM " + self.naam()
-        sql += " WHERE begindatum <= current_date"
-        sql += "   AND einddatum  >= current_date"
+        sql += " WHERE (einddatum IS NULL OR einddatum >= current_date)"
         sql += "   AND aanduidingrecordinactief = FALSE"
         database.maakView(self.naam() + "actueel", sql)
 
@@ -630,8 +632,7 @@ class BAGobject:
         if self.heeftGeometrie():
             sql += self.naam() + ".oid::bigint as oid," 
         sql += " * FROM " + self.naam()
-        sql += " WHERE begindatum <= current_date"
-        sql += "   AND einddatum  >= current_date"
+        sql += " WHERE (einddatum IS NULL OR einddatum >= current_date)"
         sql += "   AND aanduidingrecordinactief = FALSE"
         sql += "   AND " + statusveld + " <> '" + status1 + "'" 
         if status2 <> "":
@@ -1074,17 +1075,17 @@ class Nummeraanduiding(BAGobject):
         sql += "     , openbareruimte   OPR"
         sql += "     , nummeraanduiding NUM"
         sql += " WHERE NUM.begindatum <= current_date"
-        sql += "   AND NUM.einddatum  >= current_date"
+        sql += "   AND (NUM.einddatum IS NULL OR NUM.einddatum >= current_date)"
         sql += "   AND NUM.aanduidingrecordinactief = FALSE"
         sql += "   AND OPR.identificatie = NUM.gerelateerdeopenbareruimte"
         sql += "   AND OPR.begindatum <= current_date"
-        sql += "   AND OPR.einddatum  >= current_date"
+        sql += "   AND (OPR.einddatum IS NULL OR OPR.einddatum >= current_date)"
         sql += "   AND OPR.aanduidingrecordinactief = FALSE"
         sql += "   AND (   (    WPL.identificatie = OPR.gerelateerdewoonplaats"
         sql += "            AND NUM.gerelateerdewoonplaats = NULL)"
         sql += "        OR (WPL.identificatie = NUM.gerelateerdewoonplaats))"
         sql += "   AND WPL.begindatum <= current_date"
-        sql += "   AND WPL.einddatum  >= current_date"
+        sql += "   AND (WPL.einddatum IS NULL OR WPL.einddatum >= current_date)"
         sql += "   AND WPL.aanduidingrecordinactief = FALSE"
         database.maakView("adresActueel", sql %("adresActueel"))
         
@@ -1104,9 +1105,9 @@ class BAGadresseerbaarObject(BAGobject):
     
     def __init__(self):
         BAGobject.__init__(self)
-        self.hoofdadres = BAGattribuut(       16, "hoofdadres", "bag_LVC:gerelateerdeAdressen/bag_LVC:hoofdadres/bag_LVC:identificatie")
-        self.nevenadres = BAGrelatieAttribuut("adresseerbaarobjectnevenadres",
-                                              16, "nevenadres", "bag_LVC:gerelateerdeAdressen/bag_LVC:nevenadres/bag_LVC:identificatie")
+        self.hoofdadres = BAGnumeriekAttribuut(16, "hoofdadres", "bag_LVC:gerelateerdeAdressen/bag_LVC:hoofdadres/bag_LVC:identificatie")
+        self.nevenadres = BAGrelatieNumeriekAttribuut("adresseerbaarobjectnevenadres",
+                                                      16, "nevenadres", "bag_LVC:gerelateerdeAdressen/bag_LVC:nevenadres/bag_LVC:identificatie")
         self.attributen.append(self.hoofdadres)       
         self.attributen.append(self.nevenadres)       
 
@@ -1143,9 +1144,9 @@ class Ligplaats(BAGadresseerbaarObject):
         BAGadresseerbaarObject.__init__(self)
         self.ligplaatsStatus = BAGenumAttribuut(['Plaats aangewezen', 'Plaats ingetrokken'],
                                                  "plaatsStatus", "bag_LVC:ligplaatsStatus")
-        self.ligplaatsGeometrie = BAGpolygoon(3, 1000000, "ligplaatsGeometrie", "bag_LVC:ligplaatsGeometrie")
+        self.ligplaatsGeometrie = BAGpolygoon(3, 1000000, "_ligplaatsGeometrie", "bag_LVC:ligplaatsGeometrie")
         self.attributen.append(self.ligplaatsStatus)       
-        # self.attributen.append(self.ligplaatsGeometrie)       
+        self.attributen.append(self.ligplaatsGeometrie)       
 
     def tag(self):
         return "bag_LVC:Ligplaats"
@@ -1174,7 +1175,7 @@ class Ligplaats(BAGadresseerbaarObject):
 class Standplaats(BAGadresseerbaarObject):
     def __init__(self):
         BAGadresseerbaarObject.__init__(self)
-        self.standplaatsStatus = BAGenumAttribuut(['Plaats uitgegeven', 'Plaats ingetrokken'],
+        self.standplaatsStatus = BAGenumAttribuut(['Plaats aangewezen', 'Plaats ingetrokken'],
                                                    "plaatsStatus", "bag_LVC:standplaatsStatus")
         self.standplaatsGeometrie = BAGpolygoon(3, 1000000, "_standplaatsGeometrie", "bag_LVC:standplaatsGeometrie")
         self.attributen.append(self.standplaatsStatus)       
